@@ -8,3 +8,5 @@ One big finding I came across is the role of short-chain fatty acids (SCFAs) pro
 Another is the impact of diet on microbiota composition, suggesting that what you eat influences your internal ecology. [Early article in the field](http://www.pnas.org/content/107/33/14691?utm_source=Master+Newsletter+Mailing+List&utm_campaign=dff4f73044-Monday_email_geography1_25_2016&utm_medium=email&utm_term=0_b8c28de774-dff4f73044-&mc_cid=dff4f73044&mc_eid=%5BUNIQID%5D)
 
 I think there is a lot to be explored within this field, especially if I can leverage my background in metabolomics. So I'm taking this opportunity to familiarize myself with what tools and datasets are currently out there, and see if I can find something new and potentially interesting. 
+
+I'm going to be uploading a series of R Notebooks which will hopefully be interactive and reproducible. 
