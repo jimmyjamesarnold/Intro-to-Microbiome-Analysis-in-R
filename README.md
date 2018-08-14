@@ -1,6 +1,8 @@
 # Intro-to-Microbiome-Analysis-in-R
 Exploring microbiome analysis tools in R
 
+![Bugs](https://github.com/jimmyjamesarnold/Intro-to-Microbiome-Analysis-in-R/blob/master/microorganism-colon-gut-bacteria.jpg)
+
 I've been thinking about the intersection of metabolism and microbiome for a while now, and finally had a reason to jump in. But tbh, I don't know that much about microbiology. I do know that microbiome research blew up within the last decade, I think due to advances in sequencing and annotation. And in that time there's been a ton of studies looking at the role of the microbiome on health and wellness. I'm particularly interested in the intersection of gut microbiota and metabolism. 
 
 One big finding I came across is the role of short-chain fatty acids (SCFAs) produced by specific gut bacteria and its influence over regulatory T cells. Here's a [great review](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5541232/) 
