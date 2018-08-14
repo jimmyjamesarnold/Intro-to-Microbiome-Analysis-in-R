@@ -1,0 +1,173 @@
+---
+title: "Microbiome and DESeq2"
+output: html_notebook
+---
+Exploring ecology - microbiome landscaping: https://academic.oup.com/femsre/article/41/2/182/2979411#58802539
+
+When using these tools, kindly cite:
+***Shetty et al. FEMS Microbiology Reviews, 41(2):182-199, 2017 ***
+Will do!
+
+This is an extension of ordination methods
+```{r}
+#Load up ggplot2 and phyloseq
+library(microbiome)
+library(knitr)
+library(ggplot2)
+library(phyloseq)
+
+#load data
+data(dietswap)
+pseq <- dietswap
+
+# Convert to compositional data
+pseq.rel <- microbiome::transform(pseq, "compositional")
+
+# Pick core taxa with with the given prevalence and detection limits
+pseq.core <- core(pseq.rel, detection = .1/100, prevalence = 90/100)
+
+# Use relative abundances for the core
+pseq.core <- microbiome::transform(pseq.core, "compositional")
+
+#look at meta data
+meta <- meta(pseq)
+head(meta)
+```
+
+Sample ordination
+Project the samples with the given method and dissimilarity measure.
+```{r}
+# Ordinate the data
+set.seed(4235421)
+# proj <- get_ordination(pseq, "MDS", "bray")
+ord <- ordinate(pseq, "MDS", "bray")
+
+#Try MDS/PCoA by nationality
+plot_ordination(pseq, ord, color = "nationality") +
+                geom_point(size = 5)
+```
+Not bad, let's try by other attributes
+
+```{r}
+#group
+plot_ordination(pseq, ord, color = "group") +
+                geom_point(size = 5)
+#BMI
+plot_ordination(pseq, ord, color = "bmi_group") +
+                geom_point(size = 5)
+#Gender
+plot_ordination(pseq, ord, color = "sex") +
+                geom_point(size = 5)
+#timepoint
+plot_ordination(pseq, ord, color = "timepoint") +
+                geom_point(size = 5)
+#timepoint.within.group
+plot_ordination(pseq, ord, color = "timepoint.within.group") +
+                geom_point(size = 5)
+```
+Of all these, nationality seems to give the cleanest separation. 
+
+I'd like to see which taxa are most differential between different nationalities. I'm going to use DESeq2 functionality in phyloseq based on this tutorial:
+http://joey711.github.io/phyloseq-extensions/DESeq2.html
+
+```{r}
+head(sample_data(pseq)$nationality, 25)
+```
+It looks like everything is labeled, which is good. Otherwise I'd have to account for unlabeled data.
+
+Now load DESeq2. Install from bioclite if needed.
+
+```{r}
+library("DESeq2")
+```
+The following two lines actually do all the complicated DESeq2 work. The function phyloseq_to_deseq2 converts your phyloseq-format microbiome data into a DESeqDataSet with dispersions estimated, using the experimental design formula, also shown (the ~nationality term). The DESeq function does the rest of the testing, in this case with default testing framework, but you can actually use alternatives.
+
+```{r}
+nat_ds <- phyloseq_to_deseq2(pseq, ~ nationality)
+nat_ds <- DESeq(nat_ds, test="Wald", fitType="parametric")
+```
+
+The following results function call creates a table of the results of the tests. Very fast. The hard work was already stored with the rest of the DESeq2-related data in our latest version of the nat_ds object (see above). I then order by the adjusted p-value, removing the entries with an NA value. The rest of this example is just formatting the results table with taxonomic information for nice(ish) display in the HTML output.
+
+```{r}
+res <- results(nat_ds, cooksCutoff = FALSE)
+alpha <- 0.01
+sigtab <- res[which(res$padj < alpha), ]
+sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(pseq)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+```
+
+Let's order the results by fold change, then do some visualization.
+
+```{r}
+sigtab <- sigtab[order(sigtab$Phylum),]
+head(sigtab)
+```
+
+Let's see if these can be visualized. 
+
+```{r}
+ggplot(sigtab, aes(x=Genus, y=log2FoldChange, color=Phylum)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+```
+
+Hmm, I bet there's a way to make this more informative, but in its current state I don't find it useful.
+
+Rather, I think I want to subset the initial data for the most differential taxa for visualization.
+First, 'Uncultured Selenomonadaceae', which scored most negative fold change by nationality.
+
+```{r}
+UncSel <- subset_taxa(pseq, Genus %in% c('Uncultured Selenomonadaceae'))
+summarize_phyloseq(UncSel)
+```
+
+Great, now let's plot it with the built-in function plot_bar.
+```{r}
+plot_bar(UncSel)
+```
+That's not very informative, let's get more specific. 
+
+```{r}
+plot_bar(UncSel, x="nationality")
+```
+
+This doesn't look like nice, I'm going to try a different layout. Perhaps a swarm plot, with a log-transformed axis.
+
+```{r}
+df <- psmelt(UncSel) # transform to dataframe for ggplot
+library(ggbeeswarm) # load beeswarm package
+ggplot(df, aes(Genus, Abundance, color=factor(nationality))) + geom_beeswarm(dodge.width=0.5) + scale_y_log10() 
+```
+
+I'm happy with that. Interesting that there are a ton of low-abundance hits. I would think it would be valuable to filter hits based on prevalance as well as abundance.
+
+Next, I want to plot the genus that had the largest lfc, 'Mitsuokella multiacida et rel.'
+
+
+```{r}
+Mitsu <- subset_taxa(pseq, Genus %in% c('Mitsuokella multiacida et rel.'))
+df <- psmelt(Mitsu) # transform to dataframe for ggplot
+ggplot(df, aes(Genus, Abundance, color=factor(nationality))) + geom_beeswarm(dodge.width=0.5) + scale_y_log10() 
+```
+
+Fantastic! These samples all have >10 hits, with a clearly higher mean in the AFR group compared to the AAM group.
+
+Finally, I'd like to try a faceted swarm plot for everything with > or < 1.5- log2fc. Moreover, it'll be faceted on the basis of phylum, to see if there's any higher level trends.
+This will be easiest if I filter the sigtab call, then pass the selected genus to the subset_taxa call, then pass to swarm plot with facet.
+
+```{r}
+fc_filtered <- sigtab[abs(sigtab$log2FoldChange)>1.5,]$Genus
+sig_taxa <- subset_taxa(pseq, Genus %in% fc_filtered)
+df <- psmelt(sig_taxa) # transform to dataframe for ggplot
+ggplot(df, aes(OTU, Abundance, color=factor(nationality))) + 
+  geom_beeswarm(dodge.width=0.5) + 
+  scale_y_log10() +
+  facet_grid(. ~ Phylum)
+```
+
+It looks like the AAM group has much higher abundances of several Bacteroidetes and some of the Clostridium clusters, while the AFR group has higher abundances of Proteobacteria. 
+
+As a primer I felt this was very informative. I think moving forward I need to read up on what some of the conventions are with respect to reporting. Also, given the scale of abundance data, I would think something like log10 transforming the data might be helpful.
+
+My next project on this subject will be exploring some datasets that combine metabolomics and metagenomics. I would like to see what tools are currently available for looking at genome information and linking that to metabolomic data. 
+I'd also like to explore some disease case/control datasets and see if machine learning can be applied to predict disease and/or outcome.
